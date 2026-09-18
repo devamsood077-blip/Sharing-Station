@@ -317,6 +317,51 @@ function appIconPath() {
   return undefined
 }
 
+function splashHtmlPath() {
+  const packaged = path.join(__dirname, '../dist/splash.html')
+  const dev = path.join(__dirname, '../public/splash.html')
+  if (fs.existsSync(packaged)) return packaged
+  return dev
+}
+
+let splashWindow: BrowserWindow | null = null
+let splashShownAt = 0
+let appRevealed = false
+
+function createSplash() {
+  splashWindow = new BrowserWindow({
+    width: 1024,
+    height: 576,
+    frame: false,
+    resizable: false,
+    movable: false,
+    center: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#050505',
+    icon: appIconPath(),
+    show: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+  splashShownAt = Date.now()
+  void splashWindow.loadFile(splashHtmlPath())
+  splashWindow.on('closed', () => { splashWindow = null })
+}
+
+function revealApp() {
+  if (appRevealed) return
+  appRevealed = true
+  mainWindow?.show()
+  mainWindow?.focus()
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.close()
+  }
+  splashWindow = null
+}
+
 function createWindow() {
   nativeTheme.themeSource = 'dark'
 
@@ -345,7 +390,11 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  mainWindow.once('ready-to-show', () => {
+    const remain = Math.max(0, 1400 - (Date.now() - splashShownAt))
+    setTimeout(revealApp, remain)
+  })
+  setTimeout(revealApp, 15000)
   mainWindow.on('closed', () => { mainWindow = null })
 }
 
@@ -386,6 +435,7 @@ function sendUpdateProgress(percent: number, status: string) {
 }
 
 app.whenReady().then(() => {
+  createSplash()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
