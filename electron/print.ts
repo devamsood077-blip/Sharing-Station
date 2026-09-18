@@ -8,10 +8,14 @@ const execFileAsync = promisify(execFile)
 
 export type PrintSize = '4x6' | '5x7'
 
-/** DNP DS620 / DS820 native 300 DPI sizes, including cutter overbleed. */
-const DNP_CANVAS: Record<PrintSize, { short: number; long: number }> = {
-  '4x6': { short: 1240, long: 1844 },
-  '5x7': { short: 1568, long: 2152 },
+/**
+ * DNP native 300 DPI print file.
+ * 4x6 canvas is 1844×1240. Finished 4×6 is 1800×1200.
+ * Bleed: 22px on each long-axis end, 20px on each short-axis end.
+ */
+const DNP_SPEC: Record<PrintSize, { long: number; short: number; bleedLong: number; bleedShort: number }> = {
+  '4x6': { long: 1844, short: 1240, bleedLong: 22, bleedShort: 20 },
+  '5x7': { long: 2152, short: 1568, bleedLong: 22, bleedShort: 20 },
 }
 
 const PRINT_SCRIPT = `
@@ -29,6 +33,7 @@ if (-not (Test-Path -LiteralPath $ImagePath)) {
 }
 
 $img = [System.Drawing.Image]::FromFile($ImagePath)
+$img.SetResolution(300, 300)
 $doc = New-Object System.Drawing.Printing.PrintDocument
 try {
   $doc.PrinterSettings.PrinterName = $Printer
@@ -78,11 +83,10 @@ try {
     $e.Graphics.SetClip($e.PageBounds)
 
     $page = $e.PageBounds
-    $scale = [Math]::Max($page.Width / $img.Width, $page.Height / $img.Height)
-    $drawW = [int][Math]::Round($img.Width * $scale)
-    $drawH = [int][Math]::Round($img.Height * $scale)
-    $drawX = $page.X + [int][Math]::Round(($page.Width - $drawW) / 2)
-    $drawY = $page.Y + [int][Math]::Round(($page.Height - $drawH) / 2)
+    $drawW = [int][Math]::Round($img.Width / 300.0 * 100)
+    $drawH = [int][Math]::Round($img.Height / 300.0 * 100)
+    $drawX = $page.X + [int][Math]::Floor(($page.Width - $drawW) / 2.0)
+    $drawY = $page.Y + [int][Math]::Floor(($page.Height - $drawH) / 2.0)
     $e.Graphics.DrawImage($img, $drawX, $drawY, $drawW, $drawH)
     $e.HasMorePages = $false
   })
@@ -100,7 +104,7 @@ function scriptPath() {
 
 export async function preparePrintImage(imagePath: string, size: PrintSize) {
   const sharp = (await import('sharp')).default
-  const canvas = DNP_CANVAS[size]
+  const spec = DNP_SPEC[size]
   const oriented = await sharp(imagePath).rotate().toBuffer()
   const meta = await sharp(oriented).metadata()
   const width = meta.width ?? 0
@@ -108,14 +112,25 @@ export async function preparePrintImage(imagePath: string, size: PrintSize) {
   if (!width || !height) throw new Error('Could not read image size.')
 
   const landscape = width > height
-  const targetW = landscape ? canvas.long : canvas.short
-  const targetH = landscape ? canvas.short : canvas.long
+  const fullW = landscape ? spec.long : spec.short
+  const fullH = landscape ? spec.short : spec.long
+  const bleedX = landscape ? spec.bleedLong : spec.bleedShort
+  const bleedY = landscape ? spec.bleedShort : spec.bleedLong
+  const visibleW = fullW - bleedX * 2
+  const visibleH = fullH - bleedY * 2
 
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const imgFile = path.join(app.getPath('temp'), `ss-print-${stamp}.jpg`)
 
   await sharp(oriented)
-    .resize(targetW, targetH, { fit: 'cover', position: 'centre' })
+    .resize(visibleW, visibleH, { fit: 'cover', position: 'centre' })
+    .extend({
+      left: bleedX,
+      right: bleedX,
+      top: bleedY,
+      bottom: bleedY,
+      extendWith: 'copy',
+    })
     .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
     .withMetadata({ density: 300 })
     .toFile(imgFile)
