@@ -309,6 +309,14 @@ async function buildPhotoObject(filePath: string) {
 let mainWindow: BrowserWindow | null = null
 let watcher: ReturnType<typeof chokidar.watch> | null = null
 
+function appIconPath() {
+  const packaged = path.join(__dirname, '../dist/icon.png')
+  const dev = path.join(__dirname, '../public/icon.png')
+  if (fs.existsSync(packaged)) return packaged
+  if (fs.existsSync(dev)) return dev
+  return undefined
+}
+
 function createWindow() {
   nativeTheme.themeSource = 'dark'
 
@@ -319,6 +327,7 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#0a0a0a',
     frame: false,
+    icon: appIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

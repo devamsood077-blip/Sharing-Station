@@ -1,7 +1,7 @@
 {
   "name": "photobooth-sharing-station",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "PhotoboothTO Sharing Station - Modern kiosk for prints, SMS, email & cloud sharing",
   "main": "dist-electron/main.js",
   "scripts": {

@@ -29,6 +29,7 @@ export default function App() {
         }
         if (next.kioskMode) window.electronAPI.setFullscreen(true)
       }
+      await promptIfUpdateAvailable()
     }
     load()
   }, [])
@@ -54,6 +55,18 @@ export default function App() {
       {kiosk && <KioskExitHotspot />}
     </div>
   )
+}
+
+async function promptIfUpdateAvailable() {
+  if (!window.electronAPI) return
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+  try {
+    const result = await window.electronAPI.checkForUpdates()
+    if (!result.ok || !result.available || !result.packaged) return
+    useAppStore.getState().openUpdateModal()
+  } catch {
+    // Offline or GitHub unreachable — skip until the next launch.
+  }
 }
 
 function KioskExitHotspot() {
