@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { X, Mail, Check, Loader2, Phone } from 'lucide-react'
-import { useAppStore, type PrintSize } from '../store/appStore'
+import { useAppStore } from '../store/appStore'
 import { enqueueBreezeUpload, ensurePhotoUploaded } from '../store/breezeQueue'
 import clsx from 'clsx'
 
@@ -15,7 +15,6 @@ export function ShareModal() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [copies, setCopies] = useState(config.defaultCopies)
-  const [printSize, setPrintSize] = useState<PrintSize>(config.printSize || '4x6')
 
   if (!shareModalPhoto) return null
 
@@ -104,7 +103,7 @@ export function ShareModal() {
       imagePath: shareModalPhoto.path,
       printer: config.defaultPrinter,
       copies,
-      printSize,
+      printSize: config.printSize || '4x6',
     })
     setLoading(false)
     if (result.success) {
@@ -202,23 +201,6 @@ export function ShareModal() {
 
           {mode === 'print' && (
             <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-3">
-                {(['4x6', '5x7'] as PrintSize[]).map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => setPrintSize(size)}
-                    className={clsx(
-                      'py-4 rounded-xl text-lg font-semibold transition-all active:scale-[0.98]',
-                      printSize === size
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-white/8 text-white/55 hover:bg-white/12 hover:text-white',
-                    )}
-                  >
-                    {size === '4x6' ? '4×6' : '5×7'}
-                  </button>
-                ))}
-              </div>
               <div className="flex items-center justify-center gap-6 py-2">
                 <button
                   onClick={() => setCopies((c) => Math.max(1, c - 1))}
