@@ -15,6 +15,7 @@ import {
   UpdateAuthError,
   updateDownloadPath,
 } from './updater'
+import { sendPhotoPrint } from './print'
 
 // ─── Config store ────────────────────────────────────────────────────────────
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
@@ -508,127 +509,12 @@ ipcMain.handle('shell:openFile', (_e, filePath: string) => {
 })
 
 // ─── IPC: Print ──────────────────────────────────────────────────────────────
-type PrintSize = '4x6' | '5x7'
-const PRINT_DPI = 300
-const INCH_MICRONS = 25400
-
-function printPaperInches(size: PrintSize, landscape: boolean) {
-  const short = size === '5x7' ? 5 : 4
-  const long = size === '5x7' ? 7 : 6
-  return landscape
-    ? { widthIn: long, heightIn: short }
-    : { widthIn: short, heightIn: long }
-}
-
-async function preparePrintImage(imagePath: string, size: PrintSize) {
-  const sharp = (await import('sharp')).default
-  const meta = await sharp(imagePath).rotate().metadata()
-  const width = meta.width ?? 0
-  const height = meta.height ?? 0
-  if (!width || !height) throw new Error('Could not read image size.')
-  const landscape = width > height
-  const { widthIn, heightIn } = printPaperInches(size, landscape)
-  const pxW = Math.round(widthIn * PRINT_DPI)
-  const pxH = Math.round(heightIn * PRINT_DPI)
-  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const imgFile = path.join(app.getPath('temp'), `ss-print-${stamp}.jpg`)
-  const htmlFile = path.join(app.getPath('temp'), `ss-print-${stamp}.html`)
-  await sharp(imagePath)
-    .rotate()
-    .resize(pxW, pxH, { fit: 'cover', position: 'centre' })
-    .jpeg({ quality: 95 })
-    .toFile(imgFile)
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  @page { size: ${widthIn}in ${heightIn}in; margin: 0; }
-  html, body {
-    margin: 0;
-    padding: 0;
-    width: ${widthIn}in;
-    height: ${heightIn}in;
-    overflow: hidden;
-    background: #000;
-  }
-  img {
-    display: block;
-    width: ${widthIn}in;
-    height: ${heightIn}in;
-  }
-</style>
-</head>
-<body><img src="${path.basename(imgFile)}" /></body>
-</html>`
-  fs.writeFileSync(htmlFile, html, 'utf8')
-  return { imgFile, htmlFile, widthIn, heightIn, landscape }
-}
-
 ipcMain.handle('print:send', async (_e, opts: {
   imagePath: string
   printer: string
   copies: number
-  printSize?: PrintSize
-}) => {
-  let printWin: BrowserWindow | null = null
-  let prepared: Awaited<ReturnType<typeof preparePrintImage>> | null = null
-  try {
-    if (!opts.imagePath || !fs.existsSync(opts.imagePath)) {
-      return { success: false, error: 'Image file not found.' }
-    }
-    const size: PrintSize = opts.printSize === '5x7' ? '5x7' : '4x6'
-    prepared = await preparePrintImage(opts.imagePath, size)
-
-    printWin = new BrowserWindow({
-      show: false,
-      width: Math.round(prepared.widthIn * PRINT_DPI),
-      height: Math.round(prepared.heightIn * PRINT_DPI),
-      webPreferences: { nodeIntegration: false, contextIsolation: true, webSecurity: false },
-    })
-
-    await printWin.loadFile(prepared.htmlFile)
-
-    const pageSize = {
-      width: Math.round(prepared.widthIn * INCH_MICRONS),
-      height: Math.round(prepared.heightIn * INCH_MICRONS),
-    }
-
-    return await new Promise<{ success: boolean; error?: string }>((resolve) => {
-      printWin!.webContents.print(
-        {
-          silent: true,
-          deviceName: opts.printer,
-          copies: opts.copies,
-          color: true,
-          printBackground: true,
-          preferCSSPageSize: true,
-          margins: { marginType: 'none' },
-          pageSize,
-          landscape: false,
-          scaleFactor: 100,
-          dpi: { horizontal: PRINT_DPI, vertical: PRINT_DPI },
-        } as Electron.WebContentsPrintOptions,
-        (success, err) => {
-          printWin?.close()
-          printWin = null
-          resolve({ success, error: err || undefined })
-        },
-      )
-    })
-  } catch (err: unknown) {
-    printWin?.close()
-    return { success: false, error: (err as Error).message }
-  } finally {
-    const files = prepared
-    if (files) {
-      setTimeout(() => {
-        try { fs.unlinkSync(files.imgFile) } catch { /* ignore */ }
-        try { fs.unlinkSync(files.htmlFile) } catch { /* ignore */ }
-      }, 8000)
-    }
-  }
-})
+  printSize?: '4x6' | '5x7'
+}) => sendPhotoPrint(opts))
 
 ipcMain.handle('print:listPrinters', async () => {
   return mainWindow?.webContents.getPrintersAsync() ?? []
