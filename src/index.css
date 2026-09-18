@@ -46,14 +46,22 @@
     app-region: no-drag;
   }
   .photo-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
+    column-width: 200px;
+    column-gap: 12px;
+  }
+  .photo-grid > * {
+    break-inside: avoid;
+    margin-bottom: 12px;
+    width: 100%;
   }
   .photo-grid-lg {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
+    column-width: 280px;
+    column-gap: 16px;
+  }
+  .photo-grid-lg > * {
+    break-inside: avoid;
+    margin-bottom: 16px;
+    width: 100%;
   }
 }
 

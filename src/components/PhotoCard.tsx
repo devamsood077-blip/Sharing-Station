@@ -34,20 +34,18 @@ export function PhotoCard({ photo, isNew }: Props) {
 
   return (
     <div
-      className={`group relative rounded-xl overflow-hidden cursor-pointer bg-[#111] border border-white/5 transition-all duration-200 hover:border-white/15 hover:scale-[1.02] ${isNew ? 'photo-in ring-2 ring-indigo-500/40' : ''}`}
+      className={`group relative rounded-xl overflow-hidden cursor-pointer bg-[#111] border border-white/5 transition-colors duration-200 hover:border-white/15 hover:z-10 ${isNew ? 'photo-in ring-2 ring-indigo-500/40' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={() => setSelectedPhoto(photo)}
     >
       {/* Image */}
-      <div className="aspect-[4/3] overflow-hidden bg-[#0d0d0d]">
-        <img
-          src={photo.url}
-          alt={photo.name}
-          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-          loading="lazy"
-        />
-      </div>
+      <img
+        src={photo.url}
+        alt={photo.name}
+        className="block w-full h-auto"
+        loading="lazy"
+      />
 
       {/* Hover overlay */}
       {hovered && (
