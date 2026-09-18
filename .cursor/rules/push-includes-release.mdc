@@ -1,0 +1,18 @@
+---
+description: Push means git plus a GitHub Release for kiosk updates
+alwaysApply: true
+---
+
+# Push includes a GitHub Release
+
+When the user says **push**, do all of this — not git only:
+
+1. Commit pending work on `main` if needed.
+2. Bump `package.json` / `package-lock.json` version (patch unless asked otherwise).
+3. Push `main` to `origin`.
+4. Run `npm run build:win`.
+5. Publish a GitHub Release (`gh release create vX.Y.Z`) with:
+   - `release/SharingStation-Setup-X.Y.Z.exe`
+   - `release/SharingStation-Portable-X.Y.Z.exe`
+
+Kiosks update from GitHub Releases, so a git push without a new release is incomplete.

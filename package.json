@@ -1,7 +1,7 @@
 {
   "name": "photobooth-sharing-station",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "PhotoboothTO Sharing Station - Modern kiosk for prints, SMS, email & cloud sharing",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -21,6 +21,7 @@
     "directories": {
       "output": "release"
     },
+    "icon": "build/icon.ico",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -29,6 +30,12 @@
     "asarUnpack": [
       "**/node_modules/sharp/**",
       "**/node_modules/@img/**"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
     ],
     "win": {
       "target": [
@@ -45,8 +52,8 @@
           ]
         }
       ],
-      "icon": "public/icon.png",
-      "signAndEditExecutable": false
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true
     },
     "nsis": {
       "oneClick": false,
@@ -54,6 +61,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Sharing Station",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
       "artifactName": "SharingStation-Setup-${version}.${ext}"
     },
     "portable": {
@@ -91,6 +101,7 @@
     "electron-builder": "^25.1.8",
     "esbuild": "^0.28.2",
     "form-data": "^4.0.6",
+    "png-to-ico": "^3.0.2",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.3",
     "vite": "^6.0.11",

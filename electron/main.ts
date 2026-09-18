@@ -310,11 +310,15 @@ let mainWindow: BrowserWindow | null = null
 let watcher: ReturnType<typeof chokidar.watch> | null = null
 
 function appIconPath() {
-  const packaged = path.join(__dirname, '../dist/icon.png')
-  const dev = path.join(__dirname, '../public/icon.png')
-  if (fs.existsSync(packaged)) return packaged
-  if (fs.existsSync(dev)) return dev
-  return undefined
+  const candidates = [
+    path.join(process.resourcesPath || '', 'icon.ico'),
+    path.join(__dirname, '../build/icon.ico'),
+    path.join(__dirname, '../public/icon.ico'),
+    path.join(__dirname, '../dist/icon.ico'),
+    path.join(__dirname, '../dist/icon.png'),
+    path.join(__dirname, '../public/icon.png'),
+  ]
+  return candidates.find((file) => fs.existsSync(file))
 }
 
 function splashHtmlPath() {

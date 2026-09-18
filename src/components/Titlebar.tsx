@@ -1,6 +1,7 @@
 import { Settings, Grid3X3, Minus, Square, X, Maximize2, RefreshCw } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { setKioskMode } from '../store/kiosk'
+import appIcon from '../assets/app-icon.png'
 
 export function Titlebar() {
   const { config, view, setView, openUpdateModal } = useAppStore()
@@ -14,9 +15,12 @@ export function Titlebar() {
     >
       {/* Left: logo + folder */}
       <div className="flex items-center gap-3 px-4" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-        <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center shrink-0">
-          <span className="text-[9px] font-bold text-white">SS</span>
-        </div>
+        <img
+          src={appIcon}
+          alt=""
+          draggable={false}
+          className="w-5 h-5 rounded-md shrink-0 object-cover"
+        />
         <span className="text-sm font-semibold tracking-tight text-white/90">
           {config.logoText || 'Sharing Station'}
         </span>
