@@ -8,10 +8,10 @@ const execFileAsync = promisify(execFile)
 
 export type PrintSize = '4x6' | '5x7'
 
-/** DNP DS620 / DS820 native 300 DPI canvases, including cutter overbleed. Always landscape. */
-const DNP_CANVAS: Record<PrintSize, { width: number; height: number }> = {
-  '4x6': { width: 1844, height: 1240 },
-  '5x7': { width: 2152, height: 1568 },
+/** DNP DS620 / DS820 native 300 DPI sizes, including cutter overbleed. */
+const DNP_CANVAS: Record<PrintSize, { short: number; long: number }> = {
+  '4x6': { short: 1240, long: 1844 },
+  '5x7': { short: 1568, long: 2152 },
 }
 
 const PRINT_SCRIPT = `
@@ -42,7 +42,6 @@ try {
   $doc.PrintController = New-Object System.Drawing.Printing.StandardPrintController
   $doc.OriginAtMargins = $false
   $doc.DefaultPageSettings.Color = $true
-  $doc.DefaultPageSettings.Landscape = $true
   $doc.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
 
   $short = 400
@@ -65,13 +64,26 @@ try {
   }
   if ($best) {
     $doc.DefaultPageSettings.PaperSize = $best
+    $paperLandscape = $best.Width -gt $best.Height
+    $imageLandscape = $img.Width -gt $img.Height
+    $doc.DefaultPageSettings.Landscape = ($paperLandscape -ne $imageLandscape)
+  } else {
+    $doc.DefaultPageSettings.Landscape = $img.Width -gt $img.Height
   }
 
   $doc.add_PrintPage({
     param($sender, $e)
     $e.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $e.Graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-    $e.Graphics.DrawImage($img, $e.PageBounds)
+    $e.Graphics.SetClip($e.PageBounds)
+
+    $page = $e.PageBounds
+    $scale = [Math]::Max($page.Width / $img.Width, $page.Height / $img.Height)
+    $drawW = [int][Math]::Round($img.Width * $scale)
+    $drawH = [int][Math]::Round($img.Height * $scale)
+    $drawX = $page.X + [int][Math]::Round(($page.Width - $drawW) / 2)
+    $drawY = $page.Y + [int][Math]::Round(($page.Height - $drawH) / 2)
+    $e.Graphics.DrawImage($img, $drawX, $drawY, $drawW, $drawH)
     $e.HasMorePages = $false
   })
 
@@ -95,13 +107,15 @@ export async function preparePrintImage(imagePath: string, size: PrintSize) {
   const height = meta.height ?? 0
   if (!width || !height) throw new Error('Could not read image size.')
 
+  const landscape = width > height
+  const targetW = landscape ? canvas.long : canvas.short
+  const targetH = landscape ? canvas.short : canvas.long
+
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const imgFile = path.join(app.getPath('temp'), `ss-print-${stamp}.jpg`)
-  const portrait = height >= width
 
   await sharp(oriented)
-    .rotate(portrait ? 90 : 0)
-    .resize(canvas.width, canvas.height, { fit: 'cover', position: 'centre' })
+    .resize(targetW, targetH, { fit: 'cover', position: 'centre' })
     .jpeg({ quality: 98, chromaSubsampling: '4:4:4' })
     .withMetadata({ density: 300 })
     .toFile(imgFile)
