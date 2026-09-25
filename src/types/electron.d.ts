@@ -1,8 +1,12 @@
+export type MediaKind = 'photo' | 'gif' | 'video'
+
 export type PhotoFile = {
   id: string
   name: string
   path: string
   url: string
+  mediaUrl: string
+  kind: MediaKind
   size: number
   mtime: number
   sessionId: string

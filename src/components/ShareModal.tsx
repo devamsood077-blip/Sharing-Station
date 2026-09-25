@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X, Mail, Check, Loader2, Phone } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { enqueueBreezeUpload, ensurePhotoUploaded } from '../store/breezeQueue'
+import { isPrintable, isVideo } from '../lib/media'
 import clsx from 'clsx'
 
 type Mode = 'sms' | 'email' | 'print' | 'breeze'
@@ -33,7 +34,7 @@ export function ShareModal() {
       return
     }
     setLoading(true)
-    setLoadingLabel('Uploading photo…')
+    setLoadingLabel('Uploading…')
     const uploaded = await ensurePhotoUploaded(shareModalPhoto)
     if (!uploaded.ok) {
       setLoading(false)
@@ -66,7 +67,7 @@ export function ShareModal() {
       return
     }
     setLoading(true)
-    setLoadingLabel('Uploading photo…')
+    setLoadingLabel('Uploading…')
     const uploaded = await ensurePhotoUploaded(shareModalPhoto)
     if (!uploaded.ok) {
       setLoading(false)
@@ -145,11 +146,20 @@ export function ShareModal() {
       <div className="relative w-full max-w-md bg-[#141414] border border-white/10 rounded-2xl overflow-hidden slide-up mx-4">
         <div className="flex items-center justify-between px-5 pt-5 pb-2">
           <div className="flex items-center gap-3">
-            <img
-              src={shareModalPhoto.url}
-              alt=""
-              className="w-14 h-14 rounded-xl object-cover border border-white/10 shrink-0"
-            />
+            {isVideo(shareModalPhoto) ? (
+              <video
+                src={shareModalPhoto.mediaUrl}
+                muted
+                playsInline
+                className="w-14 h-14 rounded-xl object-cover border border-white/10 shrink-0"
+              />
+            ) : (
+              <img
+                src={shareModalPhoto.url}
+                alt=""
+                className="w-14 h-14 rounded-xl object-cover border border-white/10 shrink-0"
+              />
+            )}
             <p className="text-lg font-semibold text-white">{titles[mode]}</p>
           </div>
           <button
@@ -199,7 +209,7 @@ export function ShareModal() {
             </div>
           )}
 
-          {mode === 'print' && (
+          {mode === 'print' && isPrintable(shareModalPhoto) && (
             <div className="space-y-5">
               <div className="flex items-center justify-center gap-6 py-2">
                 <button

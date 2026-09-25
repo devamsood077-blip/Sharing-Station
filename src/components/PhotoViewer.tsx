@@ -1,5 +1,6 @@
 import { X, Printer, Mail, MessageSquare, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
+import { isPrintable, isVideo, photoKind } from '../lib/media'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 
@@ -40,13 +41,19 @@ export function PhotoViewer() {
     }
     setFullUrl(null)
     setLoadingFull(true)
+    const kind = photoKind(selectedPhoto)
     const probe = new Image()
     probe.onload = () => {
       if (probe.naturalWidth && probe.naturalHeight) {
         setOrientation(probe.naturalWidth > probe.naturalHeight ? 'landscape' : 'portrait')
       }
     }
-    probe.src = selectedPhoto.url
+    if (selectedPhoto.url) probe.src = selectedPhoto.url
+    if (kind !== 'photo') {
+      setFullUrl(selectedPhoto.mediaUrl)
+      setLoadingFull(kind === 'video')
+      return
+    }
     window.electronAPI.getFullImage(selectedPhoto.path).then((url) => {
       setFullUrl(url)
       setLoadingFull(false)
@@ -110,13 +117,15 @@ export function PhotoViewer() {
         horizontal={landscape}
         onClick={() => openShareModal(selectedPhoto, 'email')}
       />
-      <ActionCard
-        icon={<Printer size={22} />}
-        label="Print"
-        color="sky"
-        horizontal={landscape}
-        onClick={() => openShareModal(selectedPhoto, 'print')}
-      />
+      {isPrintable(selectedPhoto) && (
+        <ActionCard
+          icon={<Printer size={22} />}
+          label="Print"
+          color="sky"
+          horizontal={landscape}
+          onClick={() => openShareModal(selectedPhoto, 'print')}
+        />
+      )}
     </>
   )
 
@@ -157,19 +166,38 @@ export function PhotoViewer() {
             </div>
           )}
           {(fullUrl || selectedPhoto.url) && (
-            <img
-              key={selectedPhoto.id}
-              src={fullUrl ?? selectedPhoto.url}
-              alt={selectedPhoto.name}
-              className="max-w-full max-h-full object-contain select-none pointer-events-none"
-              style={{ opacity: fullUrl ? 1 : 0.5, transition: 'opacity 0.25s' }}
-              draggable={false}
-              onLoad={(e) => {
-                const { naturalWidth, naturalHeight } = e.currentTarget
-                if (!naturalWidth || !naturalHeight) return
-                setOrientation(naturalWidth > naturalHeight ? 'landscape' : 'portrait')
-              }}
-            />
+            isVideo(selectedPhoto) ? (
+              <video
+                key={selectedPhoto.id}
+                src={fullUrl ?? selectedPhoto.mediaUrl}
+                poster={selectedPhoto.url}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="max-w-full max-h-full object-contain"
+                onLoadedMetadata={(e) => {
+                  const { videoWidth, videoHeight } = e.currentTarget
+                  if (!videoWidth || !videoHeight) return
+                  setOrientation(videoWidth > videoHeight ? 'landscape' : 'portrait')
+                  setLoadingFull(false)
+                }}
+              />
+            ) : (
+              <img
+                key={selectedPhoto.id}
+                src={fullUrl ?? selectedPhoto.url}
+                alt={selectedPhoto.name}
+                className="max-w-full max-h-full object-contain select-none pointer-events-none"
+                style={{ opacity: fullUrl ? 1 : 0.5, transition: 'opacity 0.25s' }}
+                draggable={false}
+                onLoad={(e) => {
+                  const { naturalWidth, naturalHeight } = e.currentTarget
+                  if (!naturalWidth || !naturalHeight) return
+                  setOrientation(naturalWidth > naturalHeight ? 'landscape' : 'portrait')
+                }}
+              />
+            )
           )}
 
           {canNavigate && (

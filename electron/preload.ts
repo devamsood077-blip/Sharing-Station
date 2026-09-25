@@ -5,6 +5,8 @@ export type PhotoFile = {
   name: string
   path: string
   url: string
+  mediaUrl: string
+  kind: 'photo' | 'gif' | 'video'
   size: number
   mtime: number
   sessionId: string

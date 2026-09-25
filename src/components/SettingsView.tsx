@@ -97,6 +97,9 @@ export function SettingsView() {
                     Browse
                   </button>
                 </div>
+                <p className="text-xs text-white/30 mt-1.5">
+                  Watches this folder and its subfolders (for example Photo / GIF / Video). JPG, PNG, GIF, WebP, and MP4 are included. GIFs and videos can be shared, but not printed.
+                </p>
               </Field>
               <Field label="Logo / Studio Name">
                 <input

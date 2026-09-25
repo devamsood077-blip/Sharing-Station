@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { PhotoFile } from '../types/electron'
+import { isPrintable } from '../lib/media'
 
 export type PrintSize = '4x6' | '5x7'
 
@@ -140,7 +141,10 @@ export const useAppStore = create<AppState>((set) => ({
 
   setPhotos: (photos) => set({ photos }),
   addPhoto: (photo) =>
-    set((s) => ({ photos: [photo, ...s.photos] })),
+    set((s) => {
+      if (s.photos.some((existing) => existing.path === photo.path)) return s
+      return { photos: [photo, ...s.photos] }
+    }),
   removePhoto: (filePath) =>
     set((s) => ({ photos: s.photos.filter((p) => p.path !== filePath) })),
   setSelectedPhoto: (photo) => set({ selectedPhoto: photo }),
@@ -157,7 +161,11 @@ export const useAppStore = create<AppState>((set) => ({
   removeNotification: (id) =>
     set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
   setView: (view) => set({ view }),
-  openShareModal: (photo, tab = 'sms') => set({ shareModalOpen: true, shareModalPhoto: photo, shareModalTab: tab }),
+  openShareModal: (photo, tab = 'sms') => set({
+    shareModalOpen: true,
+    shareModalPhoto: photo,
+    shareModalTab: tab === 'print' && !isPrintable(photo) ? 'sms' : tab,
+  }),
   closeShareModal: () => set({ shareModalOpen: false, shareModalPhoto: null, keyboardVisible: false }),
   setKeyboardVisible: (keyboardVisible) => set({ keyboardVisible }),
   setBreezeQueue: (queue) =>

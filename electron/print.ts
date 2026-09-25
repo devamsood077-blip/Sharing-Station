@@ -177,6 +177,10 @@ export async function sendPhotoPrint(opts: {
   if (!opts.imagePath || !fs.existsSync(opts.imagePath)) {
     return { success: false, error: 'Image file not found.' }
   }
+  const ext = path.extname(opts.imagePath).toLowerCase()
+  if (ext === '.mp4' || ext === '.gif') {
+    return { success: false, error: 'Only still photos can be printed.' }
+  }
   if (!opts.printer) {
     return { success: false, error: 'No printer configured.' }
   }

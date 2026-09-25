@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, protocol, net } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as crypto from 'crypto'
+import { pathToFileURL } from 'url'
 import chokidar from 'chokidar'
 import { v4 as uuidv4 } from 'uuid'
 import {
@@ -16,6 +17,22 @@ import {
   updateDownloadPath,
 } from './updater'
 import { sendPhotoPrint } from './print'
+
+const MEDIA_SCHEME = 'ssmedia'
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: MEDIA_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+      bypassCSP: true,
+    },
+  },
+])
 
 // ─── Config store ────────────────────────────────────────────────────────────
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json')
@@ -265,8 +282,73 @@ function saveShareRecords(imagePath: string, sessionId: string): ShareRecord {
   return record
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+// ─── Media helpers ───────────────────────────────────────────────────────────
+const PHOTO_EXTS = ['.jpg', '.jpeg', '.png', '.webp']
+const GIF_EXTS = ['.gif']
+const VIDEO_EXTS = ['.mp4']
+const MEDIA_EXTS = [...PHOTO_EXTS, ...GIF_EXTS, ...VIDEO_EXTS]
+
+export type MediaKind = 'photo' | 'gif' | 'video'
+
+function mediaKind(filePath: string): MediaKind {
+  const ext = path.extname(filePath).toLowerCase()
+  if (VIDEO_EXTS.includes(ext)) return 'video'
+  if (GIF_EXTS.includes(ext)) return 'gif'
+  return 'photo'
+}
+
+function mimeForPath(filePath: string) {
+  const ext = path.extname(filePath).toLowerCase()
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  if (ext === '.png') return 'image/png'
+  if (ext === '.gif') return 'image/gif'
+  if (ext === '.webp') return 'image/webp'
+  if (ext === '.mp4') return 'video/mp4'
+  return 'application/octet-stream'
+}
+
+function encodeMediaPath(filePath: string) {
+  return Buffer.from(filePath, 'utf8').toString('base64url')
+}
+
+function decodeMediaPath(encoded: string) {
+  return Buffer.from(encoded, 'base64url').toString('utf8')
+}
+
+function mediaUrlFor(filePath: string) {
+  return `${MEDIA_SCHEME}://local/${encodeMediaPath(filePath)}`
+}
+
+let currentWatchFolder = ''
+
+function isInsideWatchFolder(filePath: string) {
+  const watch = currentWatchFolder || String(readConfig().watchFolder || '').trim()
+  if (!watch) return false
+  const resolved = path.resolve(filePath)
+  const root = path.resolve(watch)
+  const rel = path.relative(root, resolved)
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
+function isAllowedMediaFile(filePath: string) {
+  const ext = path.extname(filePath).toLowerCase()
+  return MEDIA_EXTS.includes(ext) && fs.existsSync(filePath) && isInsideWatchFolder(filePath)
+}
+
+function registerMediaProtocol() {
+  protocol.handle(MEDIA_SCHEME, (request) => {
+    try {
+      const encoded = new URL(request.url).pathname.replace(/^\/+/, '')
+      const filePath = decodeMediaPath(encoded)
+      if (!isAllowedMediaFile(filePath)) {
+        return new Response('Not found', { status: 404 })
+      }
+      return net.fetch(pathToFileURL(filePath).href)
+    } catch {
+      return new Response('Bad request', { status: 400 })
+    }
+  })
+}
 
 async function fileToThumbnailDataUrl(filePath: string): Promise<string> {
   try {
@@ -277,26 +359,37 @@ async function fileToThumbnailDataUrl(filePath: string): Promise<string> {
       .toBuffer()
     return `data:image/jpeg;base64,${buf.toString('base64')}`
   } catch {
-    // Fallback: read full file if sharp fails
     return fileToFullDataUrl(filePath)
   }
 }
 
 function fileToFullDataUrl(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase().slice(1)
-  const mime = ext === 'jpg' || ext === 'jpeg' ? 'jpeg' : ext === 'png' ? 'png' : ext === 'gif' ? 'gif' : 'webp'
+  const mime = mimeForPath(filePath)
+  if (!mime.startsWith('image/')) return ''
   const data = fs.readFileSync(filePath)
-  return `data:image/${mime};base64,${data.toString('base64')}`
+  return `data:${mime};base64,${data.toString('base64')}`
+}
+
+function videoPlaceholderThumb() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+    <rect width="400" height="300" fill="#161616"/>
+    <circle cx="200" cy="150" r="38" fill="#ffffff20"/>
+    <polygon points="190,132 190,168 220,150" fill="#ffffffcc"/>
+  </svg>`
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
 }
 
 async function buildPhotoObject(filePath: string) {
   const stat = fs.statSync(filePath)
   const sessionId = getOrCreateSessionId(filePath)
+  const kind = mediaKind(filePath)
   return {
     id: uuidv4(),
     name: path.basename(filePath),
     path: filePath,
-    url: await fileToThumbnailDataUrl(filePath),
+    url: kind === 'video' ? videoPlaceholderThumb() : await fileToThumbnailDataUrl(filePath),
+    mediaUrl: mediaUrlFor(filePath),
+    kind,
     size: stat.size,
     mtime: stat.mtimeMs,
     sessionId,
@@ -439,6 +532,7 @@ function sendUpdateProgress(percent: number, status: string) {
 }
 
 app.whenReady().then(() => {
+  registerMediaProtocol()
   createSplash()
   createWindow()
   app.on('activate', () => {
@@ -469,17 +563,42 @@ ipcMain.handle('dialog:selectFolder', async () => {
   return result.filePaths[0] ?? null
 })
 
+function shouldSkipName(name: string) {
+  return name.startsWith('.') || name === 'Thumbs.db' || name === 'desktop.ini'
+}
+
+function collectMediaFiles(folderPath: string, depth = 0, maxDepth = 5): string[] {
+  const out: string[] = []
+  let entries: fs.Dirent[]
+  try {
+    entries = fs.readdirSync(folderPath, { withFileTypes: true })
+  } catch {
+    return out
+  }
+  for (const entry of entries) {
+    if (shouldSkipName(entry.name)) continue
+    const full = path.join(folderPath, entry.name)
+    if (entry.isDirectory()) {
+      if (depth < maxDepth) out.push(...collectMediaFiles(full, depth + 1, maxDepth))
+      continue
+    }
+    if (MEDIA_EXTS.includes(path.extname(entry.name).toLowerCase())) out.push(full)
+  }
+  return out
+}
+
 ipcMain.handle('fs:readImages', async (_e, folderPath: string) => {
   if (!folderPath || !fs.existsSync(folderPath)) return []
-  const files = fs.readdirSync(folderPath)
-  const imageFiles = files.filter((f) => IMAGE_EXTS.includes(path.extname(f).toLowerCase()))
-  const photos = await Promise.all(imageFiles.map((f) => buildPhotoObject(path.join(folderPath, f))))
+  currentWatchFolder = folderPath
+  const mediaFiles = collectMediaFiles(folderPath)
+  const photos = await Promise.all(mediaFiles.map((filePath) => buildPhotoObject(filePath)))
   return photos.sort((a, b) => b.mtime - a.mtime)
 })
 
 // Full-res image for the viewer — only loaded on demand
 ipcMain.handle('fs:getFullImage', (_e, filePath: string) => {
   if (!fs.existsSync(filePath)) return null
+  if (mediaKind(filePath) !== 'photo') return mediaUrlFor(filePath)
   return fileToFullDataUrl(filePath)
 })
 
@@ -489,16 +608,18 @@ ipcMain.handle('fs:watchFolder', async (_e, folderPath: string) => {
     watcher = null
   }
   if (!folderPath) return
+  currentWatchFolder = folderPath
 
   watcher = chokidar.watch(folderPath, {
     persistent: true,
     ignoreInitial: true,
-    depth: 0,
+    depth: 5,
+    ignored: (filePath: string) => shouldSkipName(path.basename(filePath)),
     awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
   })
 
   watcher.on('add', (filePath) => {
-    if (!IMAGE_EXTS.includes(path.extname(filePath).toLowerCase())) return
+    if (!MEDIA_EXTS.includes(path.extname(filePath).toLowerCase())) return
     buildPhotoObject(filePath)
       .then((photo) => mainWindow?.webContents.send('watch:add', photo))
       .catch(() => { /* file still writing — skip */ })
@@ -612,12 +733,12 @@ ipcMain.handle('email:send', async (_e, opts: {
     const postmark = await import('postmark')
     const client = new postmark.ServerClient(opts.serverToken)
     const attachments: postmark.Models.Attachment[] = []
-    if (opts.attachmentPath && fs.existsSync(opts.attachmentPath)) {
+    if (opts.attachmentPath && fs.existsSync(opts.attachmentPath) && mediaKind(opts.attachmentPath) !== 'video') {
       const data = fs.readFileSync(opts.attachmentPath)
       attachments.push({
         Name: path.basename(opts.attachmentPath),
         Content: data.toString('base64'),
-        ContentType: 'image/jpeg',
+        ContentType: mimeForPath(opts.attachmentPath),
       })
     }
     const result = await client.sendEmail({
@@ -668,7 +789,7 @@ ipcMain.handle('breeze:upload', async (_e, opts: {
     const form = new FormData()
     form.append('gallery_id', galleryId)
     if (sessionId) form.append('session_id', sessionId)
-    form.append('file', new Blob([new Uint8Array(buffer)], { type: 'image/jpeg' }), filename)
+    form.append('file', new Blob([new Uint8Array(buffer)], { type: mimeForPath(opts.imagePath) }), filename)
 
     const res = await fetch(BREEZE_UPLOAD_URL, {
       method: 'POST',

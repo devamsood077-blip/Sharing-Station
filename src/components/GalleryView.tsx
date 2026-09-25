@@ -3,6 +3,7 @@ import { FolderOpen, RefreshCw, Search, SlidersHorizontal } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { enqueueBreezeUpload } from '../store/breezeQueue'
 import { PhotoCard } from './PhotoCard'
+import { MasonryGrid } from './MasonryGrid'
 import type { PhotoFile } from '../types/electron'
 
 export function GalleryView() {
@@ -84,7 +85,7 @@ export function GalleryView() {
         <div>
           <p className="text-lg font-semibold text-white/80">No Watch Folder Selected</p>
           <p className="text-sm text-white/35 mt-1 max-w-xs">
-            Choose a folder to watch and photos will appear here automatically as they're added.
+            Choose a parent folder to watch. Photos, GIFs, and MP4s in that folder and its subfolders will appear here automatically.
           </p>
         </div>
         <button
@@ -151,15 +152,18 @@ export function GalleryView() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-center">
             <p className="text-white/30 text-sm">
-              {search ? `No photos matching "${search}"` : 'No photos in folder yet. Watching for new arrivals…'}
+              {search ? `No files matching "${search}"` : 'No photos, GIFs, or videos in this folder or its subfolders yet. Watching for new arrivals…'}
             </p>
           </div>
         ) : (
-          <div className={gridSize === 'md' ? 'photo-grid' : 'photo-grid-lg'}>
+          <MasonryGrid
+            minColumnWidth={gridSize === 'lg' ? 280 : 200}
+            gap={gridSize === 'lg' ? 16 : 12}
+          >
             {filtered.map((photo) => (
               <PhotoCard key={photo.id} photo={photo} isNew={newPhotoIds.has(photo.id)} />
             ))}
-          </div>
+          </MasonryGrid>
         )}
       </div>
     </div>
