@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Save, Printer, MessageSquare, Mail, Cloud, FolderOpen, Monitor, RefreshCw, RotateCcw } from 'lucide-react'
-import { useAppStore, type AppConfig } from '../store/appStore'
+import { useAppStore, type AppConfig, type ShareJobKind } from '../store/appStore'
 import { isBreezeUploaded, retryFailedBreezeUploads } from '../store/breezeQueue'
+import { retryFailedShareJobs } from '../store/shareQueue'
 import { setKioskMode } from '../store/kiosk'
 import clsx from 'clsx'
 
 type Section = 'general' | 'print' | 'sms' | 'email' | 'breeze' | 'display'
 
 export function SettingsView() {
-  const { config, setConfig, addNotification, setPrinters, printers, openUpdateModal } = useAppStore()
+  const { config, setConfig, addNotification, setPrinters, printers, openUpdateModal, keyboardVisible } = useAppStore()
   const [section, setSection] = useState<Section>('general')
   const [local, setLocal] = useState<AppConfig>(config)
   const [appVersion, setAppVersion] = useState('')
@@ -21,6 +22,16 @@ export function SettingsView() {
   useEffect(() => {
     void window.electronAPI.getAppVersion().then(setAppVersion)
   }, [])
+
+  useEffect(() => {
+    if (!keyboardVisible) return
+    const el = document.activeElement
+    if (!(el instanceof HTMLElement)) return
+    const id = window.setTimeout(() => {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth', inline: 'nearest' })
+    }, 50)
+    return () => window.clearTimeout(id)
+  }, [keyboardVisible, section])
 
   const set = (key: keyof AppConfig, val: unknown) => {
     setLocal((c) => ({ ...c, [key]: val }))
@@ -76,7 +87,9 @@ export function SettingsView() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div
+        className={clsx('flex-1 overflow-y-auto p-8', keyboardVisible && 'pb-[380px]')}
+      >
         <div className="max-w-lg space-y-6">
 
           {/* General */}
@@ -250,6 +263,16 @@ export function SettingsView() {
                   className="input-field w-full resize-none"
                 />
               </Field>
+              <ShareQueuePanel
+                kind="sms"
+                onRetry={() => {
+                  const n = retryFailedShareJobs('sms')
+                  addNotification({
+                    type: 'info',
+                    message: n ? `Retrying ${n} failed text${n === 1 ? '' : 's'}.` : 'No failed texts to retry.',
+                  })
+                }}
+              />
             </>
           )}
 
@@ -271,11 +294,14 @@ export function SettingsView() {
               </Field>
               <Field label="From Address">
                 <input
-                  type="email"
+                  type="text"
+                  inputMode="email"
+                  autoComplete="off"
                   value={local.emailFrom}
                   onChange={(e) => set('emailFrom', e.target.value)}
                   placeholder="photos@yourstudio.com"
                   className="input-field w-full"
+                  data-keyboard="email"
                 />
               </Field>
               <Field label="Default Subject">
@@ -294,6 +320,16 @@ export function SettingsView() {
                   className="input-field w-full resize-none font-mono text-xs"
                 />
               </Field>
+              <ShareQueuePanel
+                kind="email"
+                onRetry={() => {
+                  const n = retryFailedShareJobs('email')
+                  addNotification({
+                    type: 'info',
+                    message: n ? `Retrying ${n} failed email${n === 1 ? '' : 's'}.` : 'No failed emails to retry.',
+                  })
+                }}
+              />
             </>
           )}
 
@@ -429,6 +465,94 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       {label && <label className="block text-xs font-medium text-white/50 uppercase tracking-wider">{label}</label>}
       {children}
+    </div>
+  )
+}
+
+function shareStatusLabel(status: string) {
+  if (status === 'queued') return 'Waiting'
+  if (status === 'uploading') return 'Uploading'
+  if (status === 'sending') return 'Sending'
+  if (status === 'done') return 'Sent'
+  return 'Failed'
+}
+
+function ShareQueuePanel({ kind, onRetry }: { kind: ShareJobKind; onRetry: () => void }) {
+  const { shareQueue, shareLog } = useAppStore()
+  const jobs = shareQueue.filter((job) => job.kind === kind)
+  const log = shareLog.filter((entry) => entry.kind === kind).slice(0, 20)
+  const waiting = jobs.filter((job) => job.status === 'queued' || job.status === 'uploading' || job.status === 'sending').length
+  const failed = jobs.filter((job) => job.status === 'failed').length
+  const done = jobs.filter((job) => job.status === 'done').length
+  const noun = kind === 'sms' ? 'text' : 'email'
+
+  let summary = `No ${noun}s sent yet.`
+  if (jobs.length) {
+    const parts: string[] = []
+    if (waiting) parts.push(`${waiting} in progress`)
+    if (done) parts.push(`${done} sent`)
+    if (failed) parts.push(`${failed} need attention`)
+    summary = parts.join(', ') + '.'
+  }
+
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium text-white/50 uppercase tracking-wider">Send queue & log</p>
+          <p className="text-sm text-white/60 mt-1">{summary}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={failed === 0}
+          className="btn-secondary flex items-center gap-2 px-4 whitespace-nowrap disabled:opacity-40"
+        >
+          <RotateCcw size={13} />
+          Retry failed
+        </button>
+      </div>
+
+      <ul className="max-h-56 overflow-y-auto rounded-xl border border-white/8 bg-[#0d0d0d] divide-y divide-white/5">
+        {!jobs.length && !log.length && (
+          <li className="px-4 py-6 text-sm text-white/30 text-center">
+            Queued and sent {noun}s will appear here.
+          </li>
+        )}
+        {jobs.filter((job) => job.status !== 'done').map((job) => (
+          <li key={job.id} className="px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-white font-medium truncate">{job.to}</p>
+                <p className="text-xs text-white/35 truncate mt-0.5">{job.photoName}</p>
+              </div>
+              <span
+                className={clsx(
+                  'shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full',
+                  job.status === 'sending' && 'bg-indigo-500/15 text-indigo-300',
+                  job.status === 'uploading' && 'bg-indigo-500/15 text-indigo-300',
+                  job.status === 'queued' && 'bg-white/8 text-white/50',
+                  job.status === 'failed' && 'bg-red-500/15 text-red-300',
+                )}
+              >
+                {shareStatusLabel(job.status)}
+              </span>
+            </div>
+            {job.error && <p className="text-xs text-red-300/80 mt-1.5 break-words">{job.error}</p>}
+          </li>
+        ))}
+        {log.map((entry) => (
+          <li key={entry.id} className="px-4 py-2.5">
+            <p className="text-xs text-white/55">
+              <span className="text-white/30 mr-2">
+                {new Date(entry.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              </span>
+              {entry.message}
+              {entry.to ? ` · ${entry.to}` : ''}
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

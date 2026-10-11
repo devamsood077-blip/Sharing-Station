@@ -2,9 +2,13 @@ import { Wifi, WifiOff, FolderOpen, Image, Cloud } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 
 export function StatusBar() {
-  const { photos, config, breezeQueue } = useAppStore()
+  const { photos, config, breezeQueue, shareQueue } = useAppStore()
   const breezeFailed = breezeQueue.filter((j) => j.status === 'failed').length
   const breezeWaiting = breezeQueue.filter((j) => j.status === 'queued' || j.status === 'uploading').length
+  const smsFailed = shareQueue.filter((j) => j.kind === 'sms' && j.status === 'failed').length
+  const smsWaiting = shareQueue.filter((j) => j.kind === 'sms' && j.status !== 'done' && j.status !== 'failed').length
+  const emailFailed = shareQueue.filter((j) => j.kind === 'email' && j.status === 'failed').length
+  const emailWaiting = shareQueue.filter((j) => j.kind === 'email' && j.status !== 'done' && j.status !== 'failed').length
 
   return (
     <div className="h-7 border-t border-white/5 bg-[#080808] flex items-center px-4 gap-4 shrink-0">
@@ -32,8 +36,14 @@ export function StatusBar() {
 
       {/* Services status */}
       <div className="flex items-center gap-3">
-        <ServiceDot label="SMS" active={!!config.twilioAccountSid} />
-        <ServiceDot label="Email" active={!!config.postmarkServerToken} />
+        <ServiceDot
+          label={smsFailed ? `SMS ${smsFailed} failed` : smsWaiting ? `SMS ${smsWaiting}` : 'SMS'}
+          active={!!config.twilioAccountSid && smsFailed === 0}
+        />
+        <ServiceDot
+          label={emailFailed ? `Email ${emailFailed} failed` : emailWaiting ? `Email ${emailWaiting}` : 'Email'}
+          active={!!config.postmarkServerToken && emailFailed === 0}
+        />
         {config.breezeEnabled && (
           <ServiceDot
             label={breezeFailed ? `Breeze ${breezeFailed} failed` : breezeWaiting ? `Breeze ${breezeWaiting}` : 'Breeze'}

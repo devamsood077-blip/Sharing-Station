@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, Mail, Check, Loader2, Phone } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
-import { enqueueBreezeUpload, ensurePhotoUploaded } from '../store/breezeQueue'
+import { enqueueBreezeUpload } from '../store/breezeQueue'
+import { enqueueShareSend, UI_WAIT_MS, waitForShareJob } from '../store/shareQueue'
 import { isPrintable, isVideo } from '../lib/media'
 import clsx from 'clsx'
 
@@ -13,18 +14,61 @@ export function ShareModal() {
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('')
   const [done, setDone] = useState(false)
+  const [doneLabel, setDoneLabel] = useState('Sent!')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [copies, setCopies] = useState(config.defaultCopies)
+  const countdownRef = useRef<number>(0)
+
+  useEffect(() => () => window.clearInterval(countdownRef.current), [])
 
   if (!shareModalPhoto) return null
 
-  const finish = () => {
+  const finish = (label = 'Sent!') => {
+    window.clearInterval(countdownRef.current)
+    setLoading(false)
+    setLoadingLabel('')
+    setDoneLabel(label)
     setDone(true)
     setTimeout(() => {
       setDone(false)
       closeShareModal()
     }, 1200)
+  }
+
+  const queueAndRelease = async (kind: 'sms' | 'email', to: string) => {
+    const job = enqueueShareSend({ kind, photo: shareModalPhoto, to })
+    setLoading(true)
+    const started = Date.now()
+    const tickLabel = () => {
+      const left = Math.max(0, Math.ceil((UI_WAIT_MS - (Date.now() - started)) / 1000))
+      setLoadingLabel(left > 0 ? `Sending… ${left}s` : 'Sending…')
+    }
+    tickLabel()
+    countdownRef.current = window.setInterval(tickLabel, 250)
+    const outcome = await waitForShareJob(job.id, UI_WAIT_MS)
+    window.clearInterval(countdownRef.current)
+    if (outcome === 'done') {
+      finish('Sent!')
+      return
+    }
+    if (outcome === 'failed') {
+      addNotification({
+        type: 'info',
+        message: kind === 'sms'
+          ? 'This text is in the retry queue.'
+          : 'This email is in the retry queue.',
+      })
+      finish('On its way')
+      return
+    }
+    addNotification({
+      type: 'info',
+      message: kind === 'sms'
+        ? 'Text will finish sending in the background.'
+        : 'Email will finish sending in the background.',
+    })
+    finish('On its way')
   }
 
   const sendSms = async () => {
@@ -33,31 +77,7 @@ export function ShareModal() {
       addNotification({ type: 'error', message: 'Twilio credentials not configured in Settings.' })
       return
     }
-    setLoading(true)
-    setLoadingLabel('Uploading…')
-    const uploaded = await ensurePhotoUploaded(shareModalPhoto)
-    if (!uploaded.ok) {
-      setLoading(false)
-      setLoadingLabel('')
-      addNotification({ type: 'error', message: uploaded.error })
-      return
-    }
-    setLoadingLabel('Sending…')
-    const result = await window.electronAPI.sendSms({
-      accountSid: config.twilioAccountSid,
-      authToken: config.twilioAuthToken,
-      fromNumber: config.twilioFromNumber,
-      toNumber: phone,
-      message: `${config.smsMessage}\n\n${shareModalPhoto.shareUrl}`,
-    })
-    setLoading(false)
-    setLoadingLabel('')
-    if (result.success) {
-      addNotification({ type: 'success', message: `Text sent to ${phone}` })
-      finish()
-    } else {
-      addNotification({ type: 'error', message: result.error ?? 'SMS failed' })
-    }
+    await queueAndRelease('sms', phone)
   }
 
   const sendEmail = async () => {
@@ -66,32 +86,7 @@ export function ShareModal() {
       addNotification({ type: 'error', message: 'Postmark not configured in Settings.' })
       return
     }
-    setLoading(true)
-    setLoadingLabel('Uploading…')
-    const uploaded = await ensurePhotoUploaded(shareModalPhoto)
-    if (!uploaded.ok) {
-      setLoading(false)
-      setLoadingLabel('')
-      addNotification({ type: 'error', message: uploaded.error })
-      return
-    }
-    setLoadingLabel('Sending…')
-    const result = await window.electronAPI.sendEmail({
-      serverToken: config.postmarkServerToken,
-      from: config.emailFrom,
-      to: email,
-      subject: config.emailSubject,
-      htmlBody: `${config.emailBody}<p><a href="${shareModalPhoto.shareUrl}">${shareModalPhoto.shareUrl}</a></p>`,
-      attachmentPath: shareModalPhoto.path,
-    })
-    setLoading(false)
-    setLoadingLabel('')
-    if (result.success) {
-      addNotification({ type: 'success', message: `Email sent to ${email}` })
-      finish()
-    } else {
-      addNotification({ type: 'error', message: result.error ?? 'Email failed' })
-    }
+    await queueAndRelease('email', email)
   }
 
   const sendPrint = async () => {
@@ -186,7 +181,7 @@ export function ShareModal() {
                   data-keyboard="phone"
                 />
               </div>
-              <ActionButton label={loading && loadingLabel ? loadingLabel : 'Send Text'} loading={loading} done={done} onClick={sendSms} disabled={!phone} />
+              <ActionButton label={loading && loadingLabel ? loadingLabel : 'Send Text'} loading={loading} done={done} doneLabel={doneLabel} onClick={sendSms} disabled={!phone} />
             </div>
           )}
 
@@ -195,7 +190,9 @@ export function ShareModal() {
               <div className="flex items-center gap-3 bg-[#0d0d0d] border border-white/10 rounded-xl px-4 py-3.5 focus-within:border-indigo-500/60 transition-colors">
                 <Mail size={16} className="text-white/30 shrink-0" />
                 <input
-                  type="email"
+                  type="text"
+                  inputMode="email"
+                  autoComplete="off"
                   placeholder="guest@gmail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -205,7 +202,7 @@ export function ShareModal() {
                   data-keyboard="email"
                 />
               </div>
-              <ActionButton label={loading && loadingLabel ? loadingLabel : 'Send Email'} loading={loading} done={done} onClick={sendEmail} disabled={!email} />
+              <ActionButton label={loading && loadingLabel ? loadingLabel : 'Send Email'} loading={loading} done={done} doneLabel={doneLabel} onClick={sendEmail} disabled={!email} />
             </div>
           )}
 
@@ -233,6 +230,7 @@ export function ShareModal() {
                 label={`Print ${copies} ${copies === 1 ? 'Copy' : 'Copies'}`}
                 loading={loading}
                 done={done}
+                doneLabel={doneLabel}
                 onClick={sendPrint}
                 disabled={!config.defaultPrinter}
               />
@@ -241,7 +239,7 @@ export function ShareModal() {
 
           {mode === 'breeze' && (
             <div className="space-y-4 py-2">
-              <ActionButton label="Upload to Breeze Cloud" loading={loading} done={done} onClick={uploadBreeze} disabled={!config.breezeApiKey} />
+              <ActionButton label="Upload to Breeze Cloud" loading={loading} done={done} doneLabel={doneLabel} onClick={uploadBreeze} disabled={!config.breezeApiKey} />
             </div>
           )}
         </div>
@@ -251,9 +249,9 @@ export function ShareModal() {
 }
 
 function ActionButton({
-  label, loading, done, onClick, disabled,
+  label, loading, done, doneLabel = 'Sent!', onClick, disabled,
 }: {
-  label: string; loading: boolean; done: boolean; onClick: () => void; disabled?: boolean
+  label: string; loading: boolean; done: boolean; doneLabel?: string; onClick: () => void; disabled?: boolean
 }) {
   return (
     <button
@@ -268,7 +266,7 @@ function ActionButton({
     >
       {loading && <Loader2 size={17} className="animate-spin" />}
       {done && <Check size={17} />}
-      {done ? 'Sent!' : label}
+      {done ? doneLabel : label}
     </button>
   )
 }

@@ -9,6 +9,7 @@ import { Notifications } from './components/Notifications'
 import { StatusBar } from './components/StatusBar'
 import { OnScreenKeyboard } from './components/OnScreenKeyboard'
 import { useAppStore, defaultConfig } from './store/appStore'
+import { resumeShareQueue } from './store/shareQueue'
 import { setKioskMode } from './store/kiosk'
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
             (saved as { breezeUploadedIds: string[] }).breezeUploadedIds,
           )
         }
+        resumeShareQueue(saved)
         if (next.kioskMode) window.electronAPI.setFullscreen(true)
       }
       await promptIfUpdateAvailable()

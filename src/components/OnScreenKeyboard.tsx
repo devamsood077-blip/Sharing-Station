@@ -55,47 +55,55 @@ function setNativeValue(el: Target, value: string) {
   el.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+function caret(el: Target) {
+  try {
+    const start = el.selectionStart
+    const end = el.selectionEnd
+    if (typeof start === 'number' && typeof end === 'number') return { start, end }
+  } catch {
+    // type=email and similar inputs do not expose a caret
+  }
+  const len = el.value.length
+  return { start: len, end: len }
+}
+
+function placeCaret(el: Target, pos: number) {
+  requestAnimationFrame(() => {
+    el.focus()
+    try {
+      el.setSelectionRange(pos, pos)
+    } catch {
+      // ignore when the field does not support selection
+    }
+  })
+}
+
 function applyEmailDomain(el: Target, domain: string) {
   const value = el.value
   const at = value.indexOf('@')
   const local = (at >= 0 ? value.slice(0, at) : value).trim()
   const next = `${local}${domain}`
   setNativeValue(el, next)
-  requestAnimationFrame(() => {
-    el.focus()
-    el.setSelectionRange(next.length, next.length)
-  })
+  placeCaret(el, next.length)
 }
 
 function insertText(el: Target, text: string) {
-  const start = el.selectionStart ?? el.value.length
-  const end = el.selectionEnd ?? el.value.length
+  const { start, end } = caret(el)
   const next = el.value.slice(0, start) + text + el.value.slice(end)
   setNativeValue(el, next)
-  const pos = start + text.length
-  requestAnimationFrame(() => {
-    el.focus()
-    el.setSelectionRange(pos, pos)
-  })
+  placeCaret(el, start + text.length)
 }
 
 function deleteText(el: Target) {
-  const start = el.selectionStart ?? 0
-  const end = el.selectionEnd ?? 0
+  const { start, end } = caret(el)
   if (start !== end) {
     setNativeValue(el, el.value.slice(0, start) + el.value.slice(end))
-    requestAnimationFrame(() => {
-      el.focus()
-      el.setSelectionRange(start, start)
-    })
+    placeCaret(el, start)
     return
   }
   if (start > 0) {
     setNativeValue(el, el.value.slice(0, start - 1) + el.value.slice(end))
-    requestAnimationFrame(() => {
-      el.focus()
-      el.setSelectionRange(start - 1, start - 1)
-    })
+    placeCaret(el, start - 1)
   }
 }
 
@@ -117,6 +125,9 @@ export function OnScreenKeyboard() {
         e.target.setAttribute('inputmode', 'none')
       }
       setKeyboardVisible(true)
+      window.requestAnimationFrame(() => {
+        e.target.scrollIntoView({ block: 'center', behavior: 'smooth', inline: 'nearest' })
+      })
     }
 
     const onFocusOut = (e: FocusEvent) => {

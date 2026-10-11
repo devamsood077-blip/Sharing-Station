@@ -82,6 +82,35 @@ export type BreezeJob = {
   updatedAt: number
 }
 
+export type ShareJobKind = 'sms' | 'email'
+export type ShareJobStatus = 'queued' | 'uploading' | 'sending' | 'done' | 'failed'
+
+export type ShareJob = {
+  id: string
+  kind: ShareJobKind
+  status: ShareJobStatus
+  to: string
+  photoName: string
+  photoPath: string
+  sessionId: string
+  shareUrl: string
+  error: string
+  attempts: number
+  createdAt: number
+  updatedAt: number
+}
+
+export type ShareLogEntry = {
+  id: string
+  jobId: string
+  at: number
+  kind: ShareJobKind
+  to: string
+  photoName: string
+  event: 'queued' | 'sent' | 'failed' | 'retry'
+  message: string
+}
+
 type AppState = {
   photos: PhotoFile[]
   selectedPhoto: PhotoFile | null
@@ -97,6 +126,9 @@ type AppState = {
   breezeQueue: BreezeJob[]
   breezeQueueProcessing: boolean
   breezeUploadedIds: string[]
+  shareQueue: ShareJob[]
+  shareQueueProcessing: boolean
+  shareLog: ShareLogEntry[]
   updateModalOpen: boolean
 
   setPhotos: (photos: PhotoFile[]) => void
@@ -116,6 +148,9 @@ type AppState = {
   setBreezeQueueProcessing: (v: boolean) => void
   setBreezeUploadedIds: (ids: string[]) => void
   markBreezeUploaded: (sessionId: string) => void
+  setShareQueue: (queue: ShareJob[] | ((q: ShareJob[]) => ShareJob[])) => void
+  setShareQueueProcessing: (v: boolean) => void
+  setShareLog: (log: ShareLogEntry[] | ((l: ShareLogEntry[]) => ShareLogEntry[])) => void
   openUpdateModal: () => void
   closeUpdateModal: () => void
 }
@@ -137,6 +172,9 @@ export const useAppStore = create<AppState>((set) => ({
   breezeQueue: [],
   breezeQueueProcessing: false,
   breezeUploadedIds: [],
+  shareQueue: [],
+  shareQueueProcessing: false,
+  shareLog: [],
   updateModalOpen: false,
 
   setPhotos: (photos) => set({ photos }),
@@ -181,6 +219,11 @@ export const useAppStore = create<AppState>((set) => ({
         photo.sessionId === sessionId ? { ...photo, uploaded: true } : photo,
       ),
     })),
+  setShareQueue: (queue) =>
+    set((s) => ({ shareQueue: typeof queue === 'function' ? queue(s.shareQueue) : queue })),
+  setShareQueueProcessing: (shareQueueProcessing) => set({ shareQueueProcessing }),
+  setShareLog: (log) =>
+    set((s) => ({ shareLog: typeof log === 'function' ? log(s.shareLog) : log })),
   openUpdateModal: () => set({ updateModalOpen: true }),
   closeUpdateModal: () => set({ updateModalOpen: false }),
 }))
