@@ -6,6 +6,10 @@ export type PrintSize = '4x6' | '5x7'
 
 export type AppConfig = {
   watchFolder: string
+  // Guest sharing
+  smsEnabled: boolean
+  emailEnabled: boolean
+  printEnabled: boolean
   // Print
   defaultPrinter: string
   defaultCopies: number
@@ -38,6 +42,9 @@ export type AppConfig = {
 
 export const defaultConfig: AppConfig = {
   watchFolder: '',
+  smsEnabled: true,
+  emailEnabled: true,
+  printEnabled: true,
   defaultPrinter: '',
   defaultCopies: 1,
   printSize: '4x6',
@@ -157,7 +164,7 @@ type AppState = {
 
 let _notifId = 0
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   photos: [],
   selectedPhoto: null,
   config: defaultConfig,
@@ -199,11 +206,17 @@ export const useAppStore = create<AppState>((set) => ({
   removeNotification: (id) =>
     set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
   setView: (view) => set({ view }),
-  openShareModal: (photo, tab = 'sms') => set({
-    shareModalOpen: true,
-    shareModalPhoto: photo,
-    shareModalTab: tab === 'print' && !isPrintable(photo) ? 'sms' : tab,
-  }),
+  openShareModal: (photo, tab) => {
+    const { config } = get()
+    const smsOn = config.smsEnabled !== false
+    const emailOn = config.emailEnabled !== false
+    const printOn = config.printEnabled !== false && isPrintable(photo)
+    let next = tab ?? (smsOn ? 'sms' : emailOn ? 'email' : printOn ? 'print' : 'breeze')
+    if (next === 'sms' && !smsOn) next = emailOn ? 'email' : printOn ? 'print' : 'breeze'
+    if (next === 'email' && !emailOn) next = smsOn ? 'sms' : printOn ? 'print' : 'breeze'
+    if (next === 'print' && !printOn) next = smsOn ? 'sms' : emailOn ? 'email' : 'breeze'
+    set({ shareModalOpen: true, shareModalPhoto: photo, shareModalTab: next })
+  },
   closeShareModal: () => set({ shareModalOpen: false, shareModalPhoto: null, keyboardVisible: false }),
   setKeyboardVisible: (keyboardVisible) => set({ keyboardVisible }),
   setBreezeQueue: (queue) =>

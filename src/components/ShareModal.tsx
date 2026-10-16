@@ -3,13 +3,14 @@ import { X, Mail, Check, Loader2, Phone } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { enqueueBreezeUpload } from '../store/breezeQueue'
 import { enqueueShareSend, UI_WAIT_MS, waitForShareJob } from '../store/shareQueue'
-import { isPrintable, isVideo } from '../lib/media'
+import { isPrintable, isVideo, sharingOn } from '../lib/media'
 import clsx from 'clsx'
 
 type Mode = 'sms' | 'email' | 'print' | 'breeze'
 
 export function ShareModal() {
   const { shareModalPhoto, shareModalTab, closeShareModal, config, addNotification, keyboardVisible } = useAppStore()
+  const sharing = sharingOn(config)
   const mode = shareModalTab as Mode
   const [loading, setLoading] = useState(false)
   const [loadingLabel, setLoadingLabel] = useState('')
@@ -166,7 +167,7 @@ export function ShareModal() {
         </div>
 
         <div className="p-5 pt-3">
-          {mode === 'sms' && (
+          {mode === 'sms' && sharing.sms && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 bg-[#0d0d0d] border border-white/10 rounded-xl px-4 py-3.5 focus-within:border-indigo-500/60 transition-colors">
                 <Phone size={16} className="text-white/30 shrink-0" />
@@ -185,7 +186,7 @@ export function ShareModal() {
             </div>
           )}
 
-          {mode === 'email' && (
+          {mode === 'email' && sharing.email && (
             <div className="space-y-4">
               <div className="flex items-center gap-3 bg-[#0d0d0d] border border-white/10 rounded-xl px-4 py-3.5 focus-within:border-indigo-500/60 transition-colors">
                 <Mail size={16} className="text-white/30 shrink-0" />
@@ -206,7 +207,7 @@ export function ShareModal() {
             </div>
           )}
 
-          {mode === 'print' && isPrintable(shareModalPhoto) && (
+          {mode === 'print' && sharing.print && isPrintable(shareModalPhoto) && (
             <div className="space-y-5">
               <div className="flex items-center justify-center gap-6 py-2">
                 <button

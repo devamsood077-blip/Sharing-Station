@@ -114,6 +114,31 @@ export function SettingsView() {
                   Watches this folder and its subfolders (for example Photo / GIF / Video). JPG, PNG, GIF, WebP, and MP4 are included. GIFs and videos can be shared, but not printed.
                 </p>
               </Field>
+              <Field label="Guest sharing">
+                <div className="space-y-3 rounded-xl border border-white/8 bg-[#0d0d0d] p-4">
+                  <ShareOptionToggle
+                    label="Text"
+                    hint="Send SMS from the kiosk"
+                    checked={local.smsEnabled}
+                    onChange={(v) => set('smsEnabled', v)}
+                  />
+                  <ShareOptionToggle
+                    label="Email"
+                    hint="Send email from the kiosk"
+                    checked={local.emailEnabled}
+                    onChange={(v) => set('emailEnabled', v)}
+                  />
+                  <ShareOptionToggle
+                    label="Print"
+                    hint="Print still photos"
+                    checked={local.printEnabled}
+                    onChange={(v) => set('printEnabled', v)}
+                  />
+                </div>
+                <p className="text-xs text-white/30 mt-1.5">
+                  Turn off options this event does not offer. Guests will not see them on the kiosk.
+                </p>
+              </Field>
               <Field label="Logo / Studio Name">
                 <input
                   type="text"
@@ -159,6 +184,13 @@ export function SettingsView() {
           {section === 'print' && (
             <>
               <SectionHeader title="Print Settings" />
+              <Field label="">
+                <ShareOptionToggle
+                  label="Offer prints at this event"
+                  checked={local.printEnabled}
+                  onChange={(v) => set('printEnabled', v)}
+                />
+              </Field>
               <Field label="Printer">
                 <div className="flex gap-2">
                   <select
@@ -225,6 +257,13 @@ export function SettingsView() {
           {section === 'sms' && (
             <>
               <SectionHeader title="SMS via Twilio" />
+              <Field label="">
+                <ShareOptionToggle
+                  label="Offer text sharing at this event"
+                  checked={local.smsEnabled}
+                  onChange={(v) => set('smsEnabled', v)}
+                />
+              </Field>
               <div className="p-3 rounded-lg bg-indigo-500/8 border border-indigo-500/20 text-xs text-indigo-300">
                 Get your credentials at <a href="https://console.twilio.com" target="_blank" className="underline">console.twilio.com</a>
               </div>
@@ -280,6 +319,13 @@ export function SettingsView() {
           {section === 'email' && (
             <>
               <SectionHeader title="Email via Postmark" />
+              <Field label="">
+                <ShareOptionToggle
+                  label="Offer email sharing at this event"
+                  checked={local.emailEnabled}
+                  onChange={(v) => set('emailEnabled', v)}
+                />
+              </Field>
               <div className="p-3 rounded-lg bg-indigo-500/8 border border-indigo-500/20 text-xs text-indigo-300">
                 Get your server token at <a href="https://account.postmarkapp.com" target="_blank" className="underline">account.postmarkapp.com</a>
               </div>
@@ -449,6 +495,33 @@ export function SettingsView() {
         </div>
       </div>
     </div>
+  )
+}
+
+function ShareOptionToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <label className="flex items-start gap-3 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-4 h-4 mt-0.5 accent-indigo-500"
+      />
+      <span>
+        <span className="block text-sm text-white/75">{label}</span>
+        {hint && <span className="block text-xs text-white/35 mt-0.5">{hint}</span>}
+      </span>
+    </label>
   )
 }
 

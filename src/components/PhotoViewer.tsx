@@ -1,6 +1,6 @@
 import { X, Printer, Mail, MessageSquare, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
-import { isPrintable, isVideo, photoKind } from '../lib/media'
+import { isPrintable, isVideo, photoKind, sharingOn } from '../lib/media'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 
@@ -9,7 +9,8 @@ type Orientation = 'landscape' | 'portrait'
 const SWIPE_THRESHOLD = 64
 
 export function PhotoViewer() {
-  const { selectedPhoto, setSelectedPhoto, openShareModal, photos, shareModalOpen } = useAppStore()
+  const { selectedPhoto, setSelectedPhoto, openShareModal, photos, shareModalOpen, config } = useAppStore()
+  const sharing = sharingOn(config)
   const [fullUrl, setFullUrl] = useState<string | null>(null)
   const [loadingFull, setLoadingFull] = useState(false)
   const [orientation, setOrientation] = useState<Orientation>('portrait')
@@ -84,6 +85,7 @@ export function PhotoViewer() {
   if (!selectedPhoto) return null
 
   const landscape = orientation === 'landscape'
+  const hasActions = sharing.sms || sharing.email || (sharing.print && isPrintable(selectedPhoto))
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || !canNavigate) return
@@ -103,21 +105,25 @@ export function PhotoViewer() {
 
   const actions = (
     <>
-      <ActionCard
-        icon={<MessageSquare size={22} />}
-        label="Send Text"
-        color="indigo"
-        horizontal={landscape}
-        onClick={() => openShareModal(selectedPhoto, 'sms')}
-      />
-      <ActionCard
-        icon={<Mail size={22} />}
-        label="Send Email"
-        color="violet"
-        horizontal={landscape}
-        onClick={() => openShareModal(selectedPhoto, 'email')}
-      />
-      {isPrintable(selectedPhoto) && (
+      {sharing.sms && (
+        <ActionCard
+          icon={<MessageSquare size={22} />}
+          label="Send Text"
+          color="indigo"
+          horizontal={landscape}
+          onClick={() => openShareModal(selectedPhoto, 'sms')}
+        />
+      )}
+      {sharing.email && (
+        <ActionCard
+          icon={<Mail size={22} />}
+          label="Send Email"
+          color="violet"
+          horizontal={landscape}
+          onClick={() => openShareModal(selectedPhoto, 'email')}
+        />
+      )}
+      {sharing.print && isPrintable(selectedPhoto) && (
         <ActionCard
           icon={<Printer size={22} />}
           label="Print"
@@ -224,16 +230,18 @@ export function PhotoViewer() {
           )}
         </div>
 
-        <div
-          className={clsx(
-            'shrink-0',
-            landscape
-              ? 'flex flex-row gap-3'
-              : 'w-56 flex flex-col gap-3 justify-center',
-          )}
-        >
-          {actions}
-        </div>
+        {hasActions && (
+          <div
+            className={clsx(
+              'shrink-0',
+              landscape
+                ? 'flex flex-row gap-3'
+                : 'w-56 flex flex-col gap-3 justify-center',
+            )}
+          >
+            {actions}
+          </div>
+        )}
       </div>
     </div>
   )

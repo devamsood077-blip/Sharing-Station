@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Share2, Printer, Eye } from 'lucide-react'
 import type { PhotoFile } from '../types/electron'
 import { useAppStore } from '../store/appStore'
-import { isPrintable, isVideo, photoKind } from '../lib/media'
+import { isPrintable, isVideo, photoKind, sharingOn } from '../lib/media'
 
 type Props = {
   photo: PhotoFile
@@ -10,11 +10,13 @@ type Props = {
 }
 
 export function PhotoCard({ photo, isNew }: Props) {
-  const { openShareModal, setSelectedPhoto } = useAppStore()
+  const { openShareModal, setSelectedPhoto, config } = useAppStore()
   const [hovered, setHovered] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const kind = photoKind(photo)
-  const printable = isPrintable(photo)
+  const sharing = sharingOn(config)
+  const printable = sharing.print && isPrintable(photo)
+  const canShare = sharing.sms || sharing.email
   const video = isVideo(photo)
 
   const handlePrintQuick = async (e: React.MouseEvent) => {
@@ -87,13 +89,15 @@ export function PhotoCard({ photo, isNew }: Props) {
       {hovered && (
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent fade-in flex flex-col justify-end p-3 gap-2">
           <div className="flex gap-2">
-            <button
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
-              onClick={(e) => { e.stopPropagation(); openShareModal(photo) }}
-            >
-              <Share2 size={13} />
-              Share
-            </button>
+            {canShare && (
+              <button
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
+                onClick={(e) => { e.stopPropagation(); openShareModal(photo) }}
+              >
+                <Share2 size={13} />
+                Share
+              </button>
+            )}
             {printable && (
               <button
                 className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"

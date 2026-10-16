@@ -1,8 +1,10 @@
 import { Wifi, WifiOff, FolderOpen, Image, Cloud } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
+import { sharingOn } from '../lib/media'
 
 export function StatusBar() {
   const { photos, config, breezeQueue, shareQueue } = useAppStore()
+  const sharing = sharingOn(config)
   const breezeFailed = breezeQueue.filter((j) => j.status === 'failed').length
   const breezeWaiting = breezeQueue.filter((j) => j.status === 'queued' || j.status === 'uploading').length
   const smsFailed = shareQueue.filter((j) => j.kind === 'sms' && j.status === 'failed').length
@@ -36,21 +38,27 @@ export function StatusBar() {
 
       {/* Services status */}
       <div className="flex items-center gap-3">
-        <ServiceDot
-          label={smsFailed ? `SMS ${smsFailed} failed` : smsWaiting ? `SMS ${smsWaiting}` : 'SMS'}
-          active={!!config.twilioAccountSid && smsFailed === 0}
-        />
-        <ServiceDot
-          label={emailFailed ? `Email ${emailFailed} failed` : emailWaiting ? `Email ${emailWaiting}` : 'Email'}
-          active={!!config.postmarkServerToken && emailFailed === 0}
-        />
+        {sharing.sms && (
+          <ServiceDot
+            label={smsFailed ? `SMS ${smsFailed} failed` : smsWaiting ? `SMS ${smsWaiting}` : 'SMS'}
+            active={!!config.twilioAccountSid && smsFailed === 0}
+          />
+        )}
+        {sharing.email && (
+          <ServiceDot
+            label={emailFailed ? `Email ${emailFailed} failed` : emailWaiting ? `Email ${emailWaiting}` : 'Email'}
+            active={!!config.postmarkServerToken && emailFailed === 0}
+          />
+        )}
         {config.breezeEnabled && (
           <ServiceDot
             label={breezeFailed ? `Breeze ${breezeFailed} failed` : breezeWaiting ? `Breeze ${breezeWaiting}` : 'Breeze'}
             active={!!config.breezeApiKey && !!config.breezeGalleryId && breezeFailed === 0}
           />
         )}
-        <ServiceDot label="Print" active={!!config.defaultPrinter} />
+        {sharing.print && (
+          <ServiceDot label="Print" active={!!config.defaultPrinter} />
+        )}
       </div>
 
       <div className="flex-1" />
